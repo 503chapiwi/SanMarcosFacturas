@@ -144,7 +144,7 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
             18: {"nombre_oficial": "San Jose El Rodeo", "alias_pdf": ["ixchiguan"]}
             19: {"nombre_oficial": "San Jose Ojetenam", "alias_pdf": ["san jose ojetenam"]}
             20: {"nombre_oficial": "San Lorenzo", "alias_pdf": ["San Lorenzo"]}
-            21: {"nombre_oficial": "San Marcos", "alias_pdf": ["San Marcos"]}
+            21: {"nombre_oficial": "San Marcos", "alias_pdf": ["San Marcos", "san marcos san marcos", "san marcos, san marcos"]}
             22: {"nombre_oficial": "San Miguel Ixtahuacan", "alias_pdf": ["san miguel ixtahuacan"]}
             23: {"nombre_oficial": "San Pablo", "alias_pdf": ["San Pablo"]}
             24: {"nombre_oficial": "San Pedro Sacatapequez", "alias_pdf": ["San Pedro Sacatepequez"]}
