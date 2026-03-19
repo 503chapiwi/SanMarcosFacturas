@@ -122,38 +122,40 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
             st.error(f"No encontré las columnas base en el Excel.")
             st.stop()
 
+        department_name = 'san marcos'
+        
         # 2. MASTER MUNICIPALITY DICTIONARY
         MUNICIPIOS = {
-            1: {"nombre_oficial": "Ayutla", "alias_pdf": ["ayutla"]},
-            2: {"nombre_oficial": "Catarina", "alias_pdf": ["catarina"]},
-            3: {"nombre_oficial": "Comitancillo", "alias_pdf": ["comitancillo"]},
-            4: {"nombre_oficial": "Concepcion Tutapa", "alias_pdf": ["concecpion tutuapa"]},
-            5: {"nombre_oficial": "El Quetzal", "alias_pdf": ["el quetzal"]},
-            6: {"nombre_oficial": "El Tumbador", "alias_pdf": ["el tumabador"]},
+            1: {"nombre_oficial": "Ayutla"},
+            2: {"nombre_oficial": "Catarina"},
+            3: {"nombre_oficial": "Comitancillo"},
+            4: {"nombre_oficial": "Concepción Tutapa"},
+            5: {"nombre_oficial": "El Quetzal"},
+            6: {"nombre_oficial": "El Tumbador"},
             7: {"nombre_oficial": "Esquipulas Palo Gordo", "alias_pdf": ["esquipulas palo gordo"]},
-            8: {"nombre_oficial": "Ixchiguan", "alias_pdf": ["ixchiguan"]}
-            9: {"nombre_oficial": "La Blanca", "alias_pdf": ["la blanca"]}
-            10: {"nombre_oficial": "La Reforma", "alias_pdf": ["la reforma"]}
-            11: {"nombre_oficial": "Malacatan", "alias_pdf": ["malacatan"]}
-            12: {"nombre_oficial": "Nuevo Progreso", "alias_pdf": ["nuevo progreso"]}
-            13: {"nombre_oficial": "Ocos", "alias_pdf": ["ocos"]}
-            14: {"nombre_oficial": "Pajapita", "alias_pdf": ["pajapita"]}
-            15: {"nombre_oficial": "Rio Blanco", "alias_pdf": ["rio blanco"]}
+            8: {"nombre_oficial": "Ixchiguan"}
+            9: {"nombre_oficial": "La Blanca"}
+            10: {"nombre_oficial": "La Reforma"}
+            11: {"nombre_oficial": "Malacatan"}
+            12: {"nombre_oficial": "Nuevo Progreso"}
+            13: {"nombre_oficial": "Ocos"}
+            14: {"nombre_oficial": "Pajapita"}
+            15: {"nombre_oficial": "Rio Blanco"}
             16: {"nombre_oficial": "San Antonio Sacatapequez", "alias_pdf": ["san antonio sacatepequez"]}
             17: {"nombre_oficial": "San Cristobal Cuhco", "alias_pdf": ["san cristobal cucho"]}
-            18: {"nombre_oficial": "San Jose El Rodeo", "alias_pdf": ["ixchiguan"]}
+            18: {"nombre_oficial": "San Jose El Rodeo", "alias_pdf": [""]}
             19: {"nombre_oficial": "San Jose Ojetenam", "alias_pdf": ["san jose ojetenam"]}
-            20: {"nombre_oficial": "San Lorenzo", "alias_pdf": ["San Lorenzo"]}
+            20: {"nombre_oficial": "San Lorenzo"}
             21: {"nombre_oficial": "San Marcos", "alias_pdf": ["San Marcos", "san marcos san marcos", "san marcos, san marcos"]}
             22: {"nombre_oficial": "San Miguel Ixtahuacan", "alias_pdf": ["san miguel ixtahuacan"]}
-            23: {"nombre_oficial": "San Pablo", "alias_pdf": ["San Pablo"]}
+            23: {"nombre_oficial": "San Pablo"}
             24: {"nombre_oficial": "San Pedro Sacatapequez", "alias_pdf": ["San Pedro Sacatepequez"]}
             25: {"nombre_oficial": "San Rafael Pie De La Cuesta", "alias_pdf": ["san rafael", "san pie de la cuesta"]}
-            26: {"nombre_oficial": "Sibinal", "alias_pdf": ["sibinal"]}
-            27: {"nombre_oficial": "Sipacapa", "alias_pdf": ["sipacapa"]}
-            28: {"nombre_oficial": "Tacana", "alias_pdf": ["tacana"]}
-            29: {"nombre_oficial": "Tajamulco", "alias_pdf": ["tajamulco"]}
-            30: {"nombre_oficial": "Tejutla", "alias_pdf": ["tejutla"]}
+            26: {"nombre_oficial": "Sibinal"}
+            27: {"nombre_oficial": "Sipacapa"}
+            28: {"nombre_oficial": "Tacana"}
+            29: {"nombre_oficial": "Tajamulco"}
+            30: {"nombre_oficial": "Tejutla"}
         }
         
         search_list = []
@@ -163,11 +165,20 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
                 
         # CORE FIX: Sorts the list so Totonicapán (ID 1) is ALWAYS evaluated last.
         # Within the other municipalities, sorts by length to catch specific names first.
-        search_list.sort(key=lambda x: (x[1] == 1, -len(x[0])))
+        search_list.sort(key=lambda x: (
+            squish_text(x[2]) == squish_text(department_name),
+            -len(x[0])
+        ))
 
         EXCEL_MAPPINGS = {
-            1: "ayutla", 2: "san cristobal", 3: "san francisco", 4: "san andres",
-            5: "momostenango", 6: "santa maria", 7: "santa lucia", 8: "san bartolo"
+            1: "ayutla", 2: "catarina", 3: "camitancillo", 4: "concepcion tutuapa",
+            5: "el quetzal", 6: "el tumbador", 7: "esquipulas palo gordo", 8: "ixchiguan", 
+            9: "la blanca", 10: "la reforma", 11: "malacatan", 12: "nuevo progreso", 
+            13: "ocos", 14: "pajapita", 15: "rio blanco", 16: "san antonio sacatepequez", 
+            17: "san cristobal cucho", 18: "san jose el rodeo", 19: "san jose ojetenam", 
+            20: "san lorenzo", 21: "san marcos", 22: "san miguel ixtahuacan", 23: "san pablo", 
+            24: "san pedro sacatepequez", 25: "san rafel pie de la cuesta", 26: "sibinal", 
+            27: "sipacapa", 28: "tacana", 29: "tajamulco", 30: "tejutla", 
         }
 
         # 3. Map Excel Rows to Municipalities
