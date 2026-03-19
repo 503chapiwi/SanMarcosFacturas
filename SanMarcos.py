@@ -133,28 +133,28 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
             5: {"nombre_oficial": "El Quetzal"},
             6: {"nombre_oficial": "El Tumbador"},
             7: {"nombre_oficial": "Esquipulas Palo Gordo", "alias_pdf": ["esquipulas palo gordo"]},
-            8: {"nombre_oficial": "Ixchiguan"}
-            9: {"nombre_oficial": "La Blanca"}
-            10: {"nombre_oficial": "La Reforma"}
-            11: {"nombre_oficial": "Malacatan"}
-            12: {"nombre_oficial": "Nuevo Progreso"}
-            13: {"nombre_oficial": "Ocos"}
-            14: {"nombre_oficial": "Pajapita"}
-            15: {"nombre_oficial": "Rio Blanco"}
-            16: {"nombre_oficial": "San Antonio Sacatapequez", "alias_pdf": ["san antonio sacatepequez"]}
-            17: {"nombre_oficial": "San Cristobal Cuhco", "alias_pdf": ["san cristobal cucho"]}
-            18: {"nombre_oficial": "San Jose El Rodeo", "alias_pdf": [""]}
-            19: {"nombre_oficial": "San Jose Ojetenam", "alias_pdf": ["san jose ojetenam"]}
-            20: {"nombre_oficial": "San Lorenzo"}
-            21: {"nombre_oficial": "San Marcos", "alias_pdf": ["San Marcos", "san marcos san marcos", "san marcos, san marcos"]}
-            22: {"nombre_oficial": "San Miguel Ixtahuacan", "alias_pdf": ["san miguel ixtahuacan"]}
-            23: {"nombre_oficial": "San Pablo"}
-            24: {"nombre_oficial": "San Pedro Sacatapequez", "alias_pdf": ["San Pedro Sacatepequez"]}
-            25: {"nombre_oficial": "San Rafael Pie De La Cuesta", "alias_pdf": ["san rafael", "san pie de la cuesta"]}
-            26: {"nombre_oficial": "Sibinal"}
-            27: {"nombre_oficial": "Sipacapa"}
-            28: {"nombre_oficial": "Tacana"}
-            29: {"nombre_oficial": "Tajamulco"}
+            8: {"nombre_oficial": "Ixchiguan"},
+            9: {"nombre_oficial": "La Blanca"},
+            10: {"nombre_oficial": "La Reforma"},
+            11: {"nombre_oficial": "Malacatan"},
+            12: {"nombre_oficial": "Nuevo Progreso"},
+            13: {"nombre_oficial": "Ocos"},
+            14: {"nombre_oficial": "Pajapita"},
+            15: {"nombre_oficial": "Rio Blanco"},
+            16: {"nombre_oficial": "San Antonio Sacatapequez", "alias_pdf": ["san antonio sacatepequez"]},
+            17: {"nombre_oficial": "San Cristobal Cuhco", "alias_pdf": ["san cristobal cucho"]},
+            18: {"nombre_oficial": "San Jose El Rodeo", "alias_pdf": [""]},
+            19: {"nombre_oficial": "San Jose Ojetenam", "alias_pdf": ["san jose ojetenam"]},
+            20: {"nombre_oficial": "San Lorenzo"},
+            21: {"nombre_oficial": "San Marcos", "alias_pdf": ["San Marcos", "san marcos san marcos", "san marcos, san marcos"]},
+            22: {"nombre_oficial": "San Miguel Ixtahuacan", "alias_pdf": ["san miguel ixtahuacan"]},
+            23: {"nombre_oficial": "San Pablo"},
+            24: {"nombre_oficial": "San Pedro Sacatapequez", "alias_pdf": ["San Pedro Sacatepequez"]},
+            25: {"nombre_oficial": "San Rafael Pie De La Cuesta", "alias_pdf": ["san rafael", "san pie de la cuesta"]},
+            26: {"nombre_oficial": "Sibinal"},
+            27: {"nombre_oficial": "Sipacapa"},
+            28: {"nombre_oficial": "Tacana"},
+            29: {"nombre_oficial": "Tajamulco"},
             30: {"nombre_oficial": "Tejutla"}
         }
         
