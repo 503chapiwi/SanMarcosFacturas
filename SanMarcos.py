@@ -6,6 +6,7 @@ import unicodedata
 import streamlit as st
 import re
 import io
+from rapidfuzz import fuzz, process
 
 # --- HELPER FUNCTIONS ---
 def normalize_text(text):
@@ -67,6 +68,63 @@ def get_master_cell(ws, r_idx, c_idx):
                 return ws.cell(row=m_range.min_row, column=m_range.min_col)
     return cell
 
+def fuzzy_match_category(description, cultivados, abarrotes, threshold=80):
+    """
+    Uses fuzzy matching to categorize a product description.
+    Returns: ('agricultura', best_match_word) or ('abarrotes', best_match_word) or ('unmatched', None)
+    """
+    if not description:
+        return ('unmatched', None)
+    
+    # Normalize and extract words from description
+    desc_normalized = normalize_text(description)
+    words = desc_normalized.split()
+    
+    # Try exact matches first (original logic)
+    for word in words:
+        if word in cultivados:
+            return ('agricultura', word)
+        if word in abarrotes:
+            return ('abarrotes', word)
+    
+    # If no exact match, try fuzzy matching
+    best_agri_match = None
+    best_agri_score = 0
+    
+    for word in words:
+        # Skip very short words (less than 3 chars) for fuzzy matching
+        if len(word) < 3:
+            continue
+            
+        # Check against cultivados
+        match_result = process.extractOne(word, cultivados, scorer=fuzz.ratio)
+        if match_result and match_result[1] >= threshold:
+            if match_result[1] > best_agri_score:
+                best_agri_score = match_result[1]
+                best_agri_match = match_result[0]
+    
+    best_abar_match = None
+    best_abar_score = 0
+    
+    for word in words:
+        if len(word) < 3:
+            continue
+            
+        # Check against abarrotes
+        match_result = process.extractOne(word, abarrotes, scorer=fuzz.ratio)
+        if match_result and match_result[1] >= threshold:
+            if match_result[1] > best_abar_score:
+                best_abar_score = match_result[1]
+                best_abar_match = match_result[0]
+    
+    # Return the category with the best match
+    if best_agri_score > best_abar_score and best_agri_match:
+        return ('agricultura', best_agri_match)
+    elif best_abar_match:
+        return ('abarrotes', best_abar_match)
+    else:
+        return ('unmatched', None)
+
 # --- TRUCO CSS PARA TRADUCIR LA INTERFAZ A ESPAÑOL ---
 st.markdown("""
     <style> 
@@ -77,7 +135,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- WEB UI ---
-st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: San Marcos")
+st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: Totonicapán")
 uploaded_pdfs = st.file_uploader(label='1. Seleccione sus Facturas (PDFs)', type='pdf', accept_multiple_files=True)
 uploaded_xlsx = st.file_uploader(label='2. Seleccione su Archivo de Excel', type='xlsx')
 
@@ -92,6 +150,13 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
             ws_det.append(['Nombre Emisor', 'NIT Emisor', 'NIT Receptor', 'Num. DTE', 'Municipio', 'Alerta % Abarrotes'])
         else:
             ws_det = wb["Extra Detalles"]
+        
+        # Create sheet for unmatched items
+        if "Items Sin Clasificar" not in wb.sheetnames:
+            ws_unmatched = wb.create_sheet("Items Sin Clasificar")
+            ws_unmatched.append(['Descripción', 'Municipio', 'Total (Q)', 'Num. DTE'])
+        else:
+            ws_unmatched = wb["Items Sin Clasificar"]
 
         # 1. Map Excel Columns dynamically
         col_map = {}
@@ -120,8 +185,7 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
             st.error(f"No encontré las columnas base en el Excel.")
             st.stop()
 
-        department_name = 'san marcos'
-        
+        department_name = 'totonicapan'
         # 2. MASTER MUNICIPALITY DICTIONARY
         MUNICIPIOS = {
             1: {"nombre_oficial": "Ayutla"},
@@ -163,11 +227,11 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
                 
         # CORE FIX: Sorts the list so Totonicapán (ID 1) is ALWAYS evaluated last.
         # Within the other municipalities, sorts by length to catch specific names first.
-        search_list.sort(key=lambda x: (
+                search_list.sort(key=lambda x: (
             squish_text(x[2]) == squish_text(department_name),
             -len(x[0])
         ))
-
+        
         EXCEL_MAPPINGS = {
             1: "ayutla", 2: "catarina", 3: "camitancillo", 4: "concepcion tutuapa",
             5: "el quetzal", 6: "el tumbador", 7: "esquipulas palo gordo", 8: "ixchiguan", 
@@ -219,27 +283,92 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
 
                 if m_id:
                     abar_sum, agri_sum = 0, 0
-                    cultivados = ['tomate', 'pina', 'piña', 'banano', 'zanahoria', 'guisquil', 'cebolla', 'aguacate', 
-                                  'miltomate', 'brocoli', 'melon', 'melón', 'ejote', 'maiz', 'maíz', 'jamaica', 
-                                  'cebada', 'papaya', 'manzana', 'chile', 'apio', 'ajo', 'cilantro', 'tusa', 'sandia', 'sandía']
-                    abarrotes = ['pollo', 'tostada', 'huevo', 'pan', 'queso', 'carne', 'res']
+                    cultivados = ['tomate', 'pina', 'piña', 'banano', 'zanahoria', 'guisquil', 'güisquil', 'cebolla', 'aguacate', 
+                                  'miltomate', 'brocoli', 'brócoli', 'melon', 'melón', 'ejote', 'maiz', 'maíz', 'jamaica', 
+                                  'cebada', 'papaya', 'manzana', 'chile', 'apio', 'ajo', 'cilantro', 'tusa', 'sandia', 'sandía',
+                                  'platano', 'plátano', 'naranja', 'limon', 'limón', 'lechuga', 'repollo', 'remolacha', 
+                                  'rabano', 'rábano', 'pimiento', 'berenjena', 'calabaza', 'pepino']
+                    abarrotes = ['pollo', 'tostada', 'huevo', 'pan', 'queso', 'carne', 'res', 'chowmein', 'chow mein', 
+                                 'chaomein', 'chaumein', 'cahomein', 'crema', 'leche', 'mantequilla', 'aceite', 'arroz',
+                                 'frijol', 'azucar', 'azúcar', 'sal', 'harina', 'pasta', 'fideos', 'atol', 'incaparina']
                     
+                    # Find the Total column and Description column indices
                     total_col_idx = -1
+                    desc_col_idx = -1
+                    
                     for row_tbl in tables:
                         if not row_tbl: continue
                         for idx, cell in enumerate(row_tbl):
-                            if cell and 'total' in normalize_text(str(cell)) and 'descuento' not in normalize_text(str(cell)):
+                            if not cell: continue
+                            cell_norm = normalize_text(str(cell))
+                            
+                            # Find Total column (has "Total" and "(Q)")
+                            if 'total' in cell_norm and 'descuento' not in cell_norm and '(q)' in cell_norm:
                                 total_col_idx = idx
-                                break
-                        if total_col_idx != -1: break
+                            
+                            # Find Description column
+                            if 'descripcion' in cell_norm:
+                                desc_col_idx = idx
+                        
+                        if total_col_idx != -1 and desc_col_idx != -1:
+                            break
+                    
+                    # If we didn't find the description column, assume it's index 3
+                    if desc_col_idx == -1:
+                        desc_col_idx = 3
 
+                    # Process each row in the tables
                     for row_tbl in tables:
                         if not row_tbl: continue
-                        row_text = " ".join([normalize_text(str(x)) for x in row_tbl if x])
+                        
+                        # Build full row text for matching
+                        row_text = " ".join([str(x) for x in row_tbl if x])
+                        row_text_normalized = normalize_text(row_text)
+                        
+                        # FILTER 1: Skip rows with administrative keywords
+                        skip_keywords = ['totales', 'superintendencia', 'datos del certificador', 
+                                        'contribuyendo', 'sujeto a pagos', 'no genera derecho',
+                                        'descripcion', 'cantidad', 'unitario', 'descuentos', 'impuestos']
+                        if any(keyword in row_text_normalized for keyword in skip_keywords):
+                            continue
+                        
+                        # FILTER 2: First cell should be a number (item number like 1, 2, 3...)
+                        if row_tbl and row_tbl[0]:
+                            first_cell = str(row_tbl[0]).strip()
+                            # Check if first cell is a number (item rows start with 1, 2, 3, etc.)
+                            if not first_cell.isdigit():
+                                continue
+                        else:
+                            continue
+                        
+                        # Extract the value
                         val = extract_value_from_row(row_tbl, total_col_idx)
-                            
-                        if any(x in row_text for x in cultivados): agri_sum += val
-                        if any(x in row_text for x in abarrotes): abar_sum += val
+                        
+                        # Skip rows with zero or invalid value
+                        if val <= 0:
+                            continue
+                        
+                        # Extract ONLY the description from the correct column
+                        description = ""
+                        if desc_col_idx < len(row_tbl) and row_tbl[desc_col_idx]:
+                            description = str(row_tbl[desc_col_idx]).strip()
+                        else:
+                            # Fallback: try index 3
+                            if len(row_tbl) > 3 and row_tbl[3]:
+                                description = str(row_tbl[3]).strip()
+                            else:
+                                description = row_text
+                        
+                        # Use fuzzy matching to categorize (using full row text for matching)
+                        category, matched_word = fuzzy_match_category(row_text, cultivados, abarrotes, threshold=80)
+                        
+                        if category == 'agricultura':
+                            agri_sum += val
+                        elif category == 'abarrotes':
+                            abar_sum += val
+                        elif category == 'unmatched':
+                            # Add ONLY the description to unmatched items sheet
+                            ws_unmatched.append([description, m_name, val, dte_val])
                     
                     nit_e_match = re.search(r'Emisor:\s*([0-9Kk\-]+)', text, re.I)
                     nit_r_match = re.search(r'Receptor:\s*([0-9Kk\-]+)', text, re.I)
@@ -288,8 +417,10 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
                 target_cell = get_master_cell(ws, r_idx, col_map['productores'])
                 target_cell.value = int(safe_float(target_cell.value)) + len(data['emisores'])
 
-        # 6. Format "Extra Detalles"
+        # 6. Format "Extra Detalles" and "Items Sin Clasificar"
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+        
+        # Format Extra Detalles
         for col in ws_det.columns:
             max_length = 0
             col_letter = get_column_letter(col[0].column) 
@@ -298,12 +429,30 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
                 try: max_length = max(max_length, len(str(cell.value)))
                 except: pass
             ws_det.column_dimensions[col_letter].width = max_length + 2
+        
+        # Format Items Sin Clasificar
+        for col in ws_unmatched.columns:
+            max_length = 0
+            col_letter = get_column_letter(col[0].column) 
+            for cell in col:
+                cell.border = thin_border 
+                try: max_length = max(max_length, len(str(cell.value)))
+                except: pass
+            ws_unmatched.column_dimensions[col_letter].width = max_length + 2
 
         # 7. Final Export
         output = io.BytesIO()
         wb.save(output)
         
-        st.success(f"¡Proceso completado! {new_count} facturas procesadas y agregadas al Excel con éxito.")
+        # Count unmatched items (excluding header row)
+        unmatched_count = ws_unmatched.max_row - 1 if ws_unmatched.max_row > 1 else 0
+        
+        success_msg = f"¡Proceso completado! {new_count} facturas procesadas y agregadas al Excel con éxito."
+        if unmatched_count > 0:
+            success_msg += f"""\n\n⚠️ {unmatched_count} items sin clasificar encontrados. Están en la tercera hoja del archivo de Excel, 'Items sin Clasificar', para revisión manual.
+                            Los totales de esos productos no fueron agregados a la cantidad de la primera hoja"""
+        
+        st.success(success_msg)
         output.seek(0)
         st.download_button("Descargar Reporte Final", data=output.getvalue(), 
                            file_name="Reporte_MAGA_Actualizado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
