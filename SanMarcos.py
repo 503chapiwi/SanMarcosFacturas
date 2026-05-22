@@ -50,15 +50,6 @@ def clean_currency(value):
     try: return float(raw)
     except ValueError: return 0.0
 
-def extract_value_from_row(row_list, total_idx):
-    if total_idx != -1 and len(row_list) > total_idx:
-        val = clean_currency(row_list[total_idx])
-        if val > 0: return val
-    for item in reversed(row_list):
-        val = clean_currency(item)
-        if val > 0: return val
-    return 0.0
-
 def get_master_cell(ws, r_idx, c_idx):
     cell = ws.cell(row=r_idx, column=c_idx)
     if type(cell).__name__ == 'MergedCell':
@@ -66,6 +57,41 @@ def get_master_cell(ws, r_idx, c_idx):
             if cell.coordinate in m_range:
                 return ws.cell(row=m_range.min_row, column=m_range.min_col)
     return cell
+
+def extract_grand_total(tables, text):
+    """
+    Return the invoice's grand total from the 'TOTALES' row.
+
+    Primary strategy: find the row whose cells contain 'TOTALES' and use the IVA
+    anchor — Total (Q) sits immediately to the left of the 'IVA' Impuestos label.
+    This is robust against pdfplumber's column-count drift across pages.
+
+    Fallback: regex against the raw extracted text for a "TOTALES … IVA" line and
+    take the last number before IVA.
+    """
+    # Primary: table-based
+    for row in tables:
+        if not row:
+            continue
+        row_text_upper = " ".join(str(c) for c in row if c).upper()
+        if 'TOTALES' not in row_text_upper:
+            continue
+        for idx, cell in enumerate(row):
+            if cell is None:
+                continue
+            if str(cell).strip().upper() == 'IVA' and idx > 0:
+                val = clean_currency(row[idx - 1])
+                if val > 0:
+                    return val
+
+    # Fallback: parse the raw text
+    m = re.search(r'TOTALES:?\s*(.+?)\s+IVA\b', text, re.IGNORECASE)
+    if m:
+        nums = re.findall(r'[\d.,]+', m.group(1))
+        if nums:
+            return clean_currency(nums[-1])
+
+    return 0.0
 
 # --- TRUCO CSS PARA TRADUCIR LA INTERFAZ A ESPAÑOL ---
 st.markdown("""
@@ -77,25 +103,53 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- WEB UI ---
-st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: San Marcos")
-uploaded_pdfs = st.file_uploader(label='1. Seleccione sus Facturas (PDFs)', type='pdf', accept_multiple_files=True)
-uploaded_xlsx = st.file_uploader(label='2. Seleccione su Archivo de Excel', type='xlsx')
+st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: Totonicapán (Total)")
 
-if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
+# Municipality selector - user must specify which municipality the receipts belong to
+MUNICIPIOS_OPCIONES = {
+    "Totonicapán": 1,
+    "San Cristóbal Totonicapán": 2,
+    "San Francisco El Alto": 3,
+    "San Andrés Xecul": 4,
+    "Momostenango": 5,
+    "Santa María Chiquimula": 6,
+    "Santa Lucía La Reforma": 7,
+    "San Bartolo Aguas Calientes": 8
+}
+
+selected_municipio = st.selectbox(
+    label='1. Seleccione el Municipio de las facturas',
+    options=["-- Seleccionar municipio --"] + list(MUNICIPIOS_OPCIONES.keys()),
+    help="Todas las facturas que suba deben corresponder a este municipio"
+)
+
+uploaded_pdfs = st.file_uploader(label='2. Seleccione sus Facturas (PDFs)', type='pdf', accept_multiple_files=True)
+uploaded_xlsx = st.file_uploader(label='3. Seleccione su Archivo de Excel', type='xlsx')
+
+municipio_valido = selected_municipio != "-- Seleccionar municipio --"
+
+if municipio_valido:
+    st.info(f"📍 Municipio seleccionado: **{selected_municipio}**. Asegúrese de que todas las facturas correspondan a este municipio.")
+else:
+    st.warning("⚠️ Por favor seleccione un municipio antes de iniciar el proceso.")
+
+if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx and municipio_valido:
     try:
+        user_m_id = MUNICIPIOS_OPCIONES[selected_municipio]
+        user_m_name = selected_municipio
+
         input_buffer = io.BytesIO(uploaded_xlsx.read())
         wb = openpyxl.load_workbook(input_buffer)
         ws = wb.active
 
+        # "Extra Detalles" sheet (no Alerta column — no classification anymore)
         if "Extra Detalles" not in wb.sheetnames:
             ws_det = wb.create_sheet("Extra Detalles")
-            ws_det.append(['Nombre Emisor', 'NIT Emisor', 'NIT Receptor',
-                           'Nombre Receptor', 'Num. DTE', 'Municipio'])
+            ws_det.append(['Archivo PDF', 'Nombre Emisor', 'NIT Emisor', 'NIT Receptor', 'Num. DTE', 'Municipio'])
         else:
             ws_det = wb["Extra Detalles"]
 
-        # Collect DTEs already recorded in "Extra Detalles" (Num. DTE is column 5)
-        # so we can skip invoices that were already processed in a prior run.
+        # Collect DTEs already in "Extra Detalles" (Num. DTE is column 5) so we can skip duplicates.
         existing_dtes = set()
         for row in ws_det.iter_rows(min_row=2, min_col=5, max_col=5, values_only=True):
             if row[0] is not None:
@@ -127,67 +181,12 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
             st.error("No encontré la columna de Agricultura en el Excel.")
             st.stop()
 
-        department_name = 'san marcos'
-        # 2. MASTER MUNICIPALITY DICTIONARY (San Marcos department)
-        MUNICIPIOS = {
-            1:  {"nombre_oficial": "Ayutla",                        "alias_pdf": ["ayutla"]},
-            2:  {"nombre_oficial": "Catarina",                      "alias_pdf": ["catarina"]},
-            3:  {"nombre_oficial": "Comitancillo",                  "alias_pdf": ["comitancillo"]},
-            4:  {"nombre_oficial": "Concepción Tutuapa",            "alias_pdf": ["concepcion tutuapa"]},
-            5:  {"nombre_oficial": "El Quetzal",                    "alias_pdf": ["el quetzal"]},
-            6:  {"nombre_oficial": "El Tumbador",                   "alias_pdf": ["el tumbador"]},
-            7:  {"nombre_oficial": "Esquipulas Palo Gordo",         "alias_pdf": ["esquipulas palo gordo"]},
-            8:  {"nombre_oficial": "Ixchiguán",                     "alias_pdf": ["ixchiguan"]},
-            9:  {"nombre_oficial": "La Blanca",                     "alias_pdf": ["la blanca"]},
-            10: {"nombre_oficial": "La Reforma",                    "alias_pdf": ["la reforma"]},
-            11: {"nombre_oficial": "Malacatán",                     "alias_pdf": ["malacatan"]},
-            12: {"nombre_oficial": "Nuevo Progreso",                "alias_pdf": ["nuevo progreso"]},
-            13: {"nombre_oficial": "Ocós",                          "alias_pdf": ["ocos"]},
-            14: {"nombre_oficial": "Pajapita",                      "alias_pdf": ["pajapita"]},
-            15: {"nombre_oficial": "Río Blanco",                    "alias_pdf": ["rio blanco"]},
-            16: {"nombre_oficial": "San Antonio Sacatepéquez",      "alias_pdf": ["san antonio sacatepequez"]},
-            17: {"nombre_oficial": "San Cristóbal Cucho",           "alias_pdf": ["san cristobal cucho"]},
-            18: {"nombre_oficial": "San José El Rodeo",             "alias_pdf": ["san jose el rodeo", "el rodeo"]},
-            19: {"nombre_oficial": "San José Ojetenam",             "alias_pdf": ["san jose ojetenam"]},
-            20: {"nombre_oficial": "San Lorenzo",                   "alias_pdf": ["san lorenzo"]},
-            21: {"nombre_oficial": "San Marcos",                    "alias_pdf": ["san marcos, san marcos", "san marcos san marcos"]},
-            22: {"nombre_oficial": "San Miguel Ixtahuacán",         "alias_pdf": ["san miguel ixtahuacan"]},
-            23: {"nombre_oficial": "San Pablo",                     "alias_pdf": ["san pablo"]},
-            24: {"nombre_oficial": "San Pedro Sacatepéquez",        "alias_pdf": ["san pedro sacatepequez"]},
-            25: {"nombre_oficial": "San Rafael Pie De La Cuesta",   "alias_pdf": ["san rafael pie de la cuesta", "san rafael"]},
-            26: {"nombre_oficial": "Sibinal",                       "alias_pdf": ["sibinal"]},
-            27: {"nombre_oficial": "Sipacapa",                      "alias_pdf": ["sipacapa"]},
-            28: {"nombre_oficial": "Tacaná",                        "alias_pdf": ["tacana"]},
-            29: {"nombre_oficial": "Tajumulco",                     "alias_pdf": ["tajumulco"]},
-            30: {"nombre_oficial": "Tejutla",                       "alias_pdf": ["tejutla"]},
-        }
-
-        search_list = []
-        for m_id, data in MUNICIPIOS.items():
-            aliases = data.get("alias_pdf", [data["nombre_oficial"]])
-            for alias in aliases:
-                if alias:  # skip empties defensively
-                    search_list.append((alias, m_id, data["nombre_oficial"]))
-
-        # Sort so the department capital (ambiguous "San Marcos") is evaluated last;
-        # within the rest, longer aliases first so specific names win.
-        search_list.sort(key=lambda x: (
-            squish_text(x[2]) == squish_text(department_name),
-            -len(x[0])
-        ))
-
         EXCEL_MAPPINGS = {
-            1: "ayutla", 2: "catarina", 3: "comitancillo", 4: "concepcion tutuapa",
-            5: "el quetzal", 6: "el tumbador", 7: "esquipulas palo gordo", 8: "ixchiguan",
-            9: "la blanca", 10: "la reforma", 11: "malacatan", 12: "nuevo progreso",
-            13: "ocos", 14: "pajapita", 15: "rio blanco", 16: "san antonio sacatepequez",
-            17: "san cristobal cucho", 18: "san jose el rodeo", 19: "san jose ojetenam",
-            20: "san lorenzo", 21: "san marcos", 22: "san miguel ixtahuacan", 23: "san pablo",
-            24: "san pedro sacatepequez", 25: "san rafael pie de la cuesta", 26: "sibinal",
-            27: "sipacapa", 28: "tacana", 29: "tajumulco", 30: "tejutla",
+            1: "totonicapán", 2: "san cristobal", 3: "san francisco", 4: "san andres",
+            5: "momostenango", 6: "santa maria", 7: "santa lucia", 8: "san bartolo"
         }
 
-        # 3. Map Excel Rows to Municipalities
+        # 2. Map Excel Rows to Municipalities
         row_map = {}
         for row_ex in ws.iter_rows(min_row=5, max_row=150):
             row_text = " ".join([str(c.value) for c in row_ex if c.value and type(c).__name__ != 'MergedCell'])
@@ -198,11 +197,12 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
                 if key_squished in row_squished:
                     row_map[m_id] = row_ex[0].row
 
-        batch_totals = {m_id: {'agri': 0.0, 'emisores': set(), 'receptores': set()} for m_id in MUNICIPIOS.keys()}
+        batch_totals = {m_id: {'total': 0.0, 'emisores': set(), 'receptores': set()} for m_id in MUNICIPIOS_OPCIONES.values()}
         new_count = 0
+        skipped_non_standard = []
         progress_bar = st.progress(0)
 
-        # 4. Process each PDF
+        # 3. Process each PDF
         for i, pdf_file in enumerate(uploaded_pdfs):
             with pdfplumber.open(pdf_file) as pdf:
                 text = "".join([p.extract_text() or "" for p in pdf.pages])
@@ -211,108 +211,66 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
                     t = p.extract_table()
                     if t: tables.extend(t)
 
+                # VALIDATION: Check if this is a standard SAT factura
+                has_dte = bool(re.search(r'N[úu]mero\s*de\s*DTE', text, re.IGNORECASE))
+                has_autorizacion = bool(re.search(r'N[úu]mero\s*de\s*Autorizaci[óo]n', text, re.IGNORECASE))
+                has_nit_emisor = bool(re.search(r'Nit\s*Emisor', text, re.IGNORECASE))
+                marker_count = sum([has_dte, has_autorizacion, has_nit_emisor])
+                is_standard_factura = marker_count >= 2
+
+                if not is_standard_factura:
+                    skipped_non_standard.append(pdf_file.name)
+                    progress_bar.progress((i + 1) / len(uploaded_pdfs))
+                    continue
+
                 dte_m = re.search(r'N[úu]mero\s*de\s*DTE:\s*(\d+)', text, re.IGNORECASE)
                 dte_val = dte_m.group(1) if dte_m else pdf_file.name
 
-                # Duplicate-DTE guard: skip invoices whose DTE already exists in "Extra Detalles"
-                # (either from a prior run or from an earlier PDF in this same batch).
+                # Duplicate-DTE guard
                 if str(dte_val).strip() in existing_dtes:
                     st.warning(f"Esta factura (Num. DTE: {dte_val}) no ha sido agregado al archivo de Excel: ya ha sido procesado")
                     progress_bar.progress((i + 1) / len(uploaded_pdfs))
                     continue
 
-                text_squished = squish_text(text)
-                m_id, m_name = None, "N/A"
+                # Grab the single grand total — no line-item parsing, no product matching.
+                grand_total = extract_grand_total(tables, text)
+                if grand_total <= 0:
+                    st.warning(f"No se pudo determinar el total de la factura: {pdf_file.name}")
+                    progress_bar.progress((i + 1) / len(uploaded_pdfs))
+                    continue
 
-                for alias, mun_id, official_name in search_list:
-                    alias_squished = squish_text(alias)
-                    if alias_squished and alias_squished in text_squished:
-                        m_id = mun_id
-                        m_name = official_name
-                        break
+                # Emisor / receptor metadata for "Extra Detalles"
+                nit_e_match = re.search(r'Emisor:\s*([0-9Kk\-]+)', text, re.I)
+                nit_r_match = re.search(r'Receptor:\s*([0-9Kk\-]+)', text, re.I)
+                name_e_match = re.search(r'(?:Factura(?:\s*Pequeño\s*Contribuyente)?)\s*\n+(.*?)\n+Nit\s*Emisor', text, re.IGNORECASE | re.DOTALL)
 
-                if m_id:
-                    agri_sum = 0.0
+                nit_e = nit_e_match.group(1).strip() if nit_e_match else "N/A"
+                nit_r = nit_r_match.group(1).strip() if nit_r_match else "N/A"
+                raw_name = re.sub(r'\s+', ' ', name_e_match.group(1).strip() if name_e_match else "N/A")
+                name_e = re.split(r'(?i)n[úu]mero\s*de\s*autorizaci[óo]n', raw_name)[0]
+                name_e = re.split(r'(?i)\bserie\b', name_e)[0].strip()
 
-                    # Find the Total (Q) column index
-                    total_col_idx = -1
-                    for row_tbl in tables:
-                        if not row_tbl: continue
-                        for idx, cell in enumerate(row_tbl):
-                            if not cell: continue
-                            cell_norm = normalize_text(str(cell))
-                            if 'total' in cell_norm and 'descuento' not in cell_norm and '(q)' in cell_norm:
-                                total_col_idx = idx
-                                break
-                        if total_col_idx != -1:
-                            break
+                m_id = user_m_id
+                m_name = user_m_name
 
-                    # Sum every line-item row's total
-                    for row_tbl in tables:
-                        if not row_tbl: continue
+                batch_totals[m_id]['total'] += grand_total
+                if nit_e != "N/A": batch_totals[m_id]['emisores'].add(nit_e)
+                if nit_r != "N/A": batch_totals[m_id]['receptores'].add(nit_r)
 
-                        row_text = " ".join([str(x) for x in row_tbl if x])
-                        row_text_normalized = normalize_text(row_text)
-
-                        skip_keywords = ['totales', 'superintendencia', 'datos del certificador',
-                                         'contribuyendo', 'sujeto a pagos', 'no genera derecho',
-                                         'descripcion', 'cantidad', 'unitario', 'descuentos', 'impuestos']
-                        if any(keyword in row_text_normalized for keyword in skip_keywords):
-                            continue
-
-                        # Line-item rows start with an item number like "1", "2", "1."
-                        if not (row_tbl and row_tbl[0] and re.match(r'^\s*\d+\.?\s*$', str(row_tbl[0]).strip())):
-                            continue
-
-                        val = extract_value_from_row(row_tbl, total_col_idx)
-                        if val <= 0:
-                            continue
-
-                        agri_sum += val
-
-                    nit_e_match = re.search(r'Emisor:\s*([0-9Kk\-]+)', text, re.I)
-                    nit_r_match = re.search(r'Receptor:\s*([0-9Kk\-]+)', text, re.I)
-                    name_e_match = re.search(r'(?:Factura(?:\s*Pequeño\s*Contribuyente)?)\s*\n+(.*?)\n+Nit\s*Emisor', text, re.IGNORECASE | re.DOTALL)
-
-                    nit_e = nit_e_match.group(1).strip() if nit_e_match else "N/A"
-                    nit_r = nit_r_match.group(1).strip() if nit_r_match else "N/A"
-                    raw_name = re.sub(r'\s+', ' ', name_e_match.group(1).strip() if name_e_match else "N/A")
-                    name_e = re.split(r'(?i)n[úu]mero\s*de\s*autorizaci[óo]n', raw_name)[0]
-                    name_e = re.split(r'(?i)\bserie\b', name_e)[0].strip()
-
-                    # Receptor (school) name: captured from "Nombre Receptor:" up to "Dirección comprador:",
-                    # with the interleaved "Fecha y hora de certificación: DD-MMM-YYYY HH:MM:SS" stripped out.
-                    name_r_match = re.search(
-                        r'Nombre\s*Receptor:\s*(.*?)(?=Direcci[oó]n\s*comprador:)',
-                        text, re.IGNORECASE | re.DOTALL)
-                    if name_r_match:
-                        raw_r = re.sub(
-                            r'\s*Fecha\s*y\s*hora\s*de\s*certificaci[oó]n:\s*\d{1,2}-[A-Za-zÁÉÍÓÚáéíóúñ]+-\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*',
-                            ' ', name_r_match.group(1), flags=re.IGNORECASE)
-                        name_r = re.sub(r'\s+', ' ', raw_r).strip().rstrip(',').strip()
-                    else:
-                        name_r = "N/A"
-
-                    batch_totals[m_id]['agri'] += agri_sum
-                    if nit_e != "N/A": batch_totals[m_id]['emisores'].add(nit_e)
-                    if nit_r != "N/A": batch_totals[m_id]['receptores'].add(nit_r)
-
-                    ws_det.append([name_e, nit_e, nit_r, name_r, dte_val, m_name])
-                    existing_dtes.add(str(dte_val).strip())
-                    new_count += 1
-                else:
-                    st.warning(f"No se pudo identificar el municipio en la factura: {pdf_file.name}")
+                ws_det.append([pdf_file.name, name_e, nit_e, nit_r, dte_val, m_name])
+                existing_dtes.add(str(dte_val).strip())
+                new_count += 1
 
             progress_bar.progress((i + 1) / len(uploaded_pdfs))
 
-        # 5. Write totals to the main sheet
+        # 4. Write to Main Sheet — grand total goes into the Agricultura column
         for target_m_id, r_idx in row_map.items():
             data = batch_totals.get(target_m_id)
             if not data: continue
 
-            if 'agri' in col_map and data['agri'] > 0:
+            if 'agri' in col_map and data['total'] > 0:
                 target_cell = get_master_cell(ws, r_idx, col_map['agri'])
-                target_cell.value = safe_float(target_cell.value) + data['agri']
+                target_cell.value = safe_float(target_cell.value) + data['total']
 
             if 'escuelas' in col_map and len(data['receptores']) > 0:
                 target_cell = get_master_cell(ws, r_idx, col_map['escuelas'])
@@ -322,7 +280,7 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
                 target_cell = get_master_cell(ws, r_idx, col_map['productores'])
                 target_cell.value = int(safe_float(target_cell.value)) + len(data['emisores'])
 
-        # 6. Format "Extra Detalles"
+        # 5. Format "Extra Detalles"
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
         for col in ws_det.columns:
             max_length = 0
@@ -333,11 +291,18 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
                 except: pass
             ws_det.column_dimensions[col_letter].width = max_length + 2
 
-        # 7. Final Export
+        # 6. Final Export
         output = io.BytesIO()
         wb.save(output)
 
         st.success(f"¡Proceso completado! {new_count} facturas procesadas y agregadas al Excel con éxito.")
+
+        if skipped_non_standard:
+            warning_msg = f"⚠️ **{len(skipped_non_standard)} factura(s) no estándar fueron ignoradas** (proformas, cotizaciones, u otros formatos no oficiales). Estas deben procesarse manualmente:\n\n"
+            for pdf_name in skipped_non_standard:
+                warning_msg += f"- {pdf_name}\n"
+            st.warning(warning_msg)
+
         output.seek(0)
         st.download_button("Descargar Reporte Final", data=output.getvalue(),
                            file_name="Reporte_MAGA_Actualizado.xlsx",
