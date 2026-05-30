@@ -200,66 +200,75 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx and municipi
         batch_totals = {m_id: {'total': 0.0, 'emisores': set(), 'receptores': set()} for m_id in MUNICIPIOS_OPCIONES.values()}
         new_count = 0
         skipped_non_standard = []
+        skipped_duplicate = []
+        skipped_no_total = []
+        failed_pdfs = []   # (pdf_name, error_message) for unexpected exceptions
         progress_bar = st.progress(0)
 
         # 3. Process each PDF
+        # CRITICAL: each iteration is isolated in its own try/except so that a single
+        # corrupt / unusual PDF can't abort the entire batch and silently drop every
+        # receipt that comes after it.
         for i, pdf_file in enumerate(uploaded_pdfs):
-            with pdfplumber.open(pdf_file) as pdf:
-                text = "".join([p.extract_text() or "" for p in pdf.pages])
-                tables = []
-                for p in pdf.pages:
-                    t = p.extract_table()
-                    if t: tables.extend(t)
+            try:
+                with pdfplumber.open(pdf_file) as pdf:
+                    text = "".join([p.extract_text() or "" for p in pdf.pages])
+                    tables = []
+                    for p in pdf.pages:
+                        t = p.extract_table()
+                        if t: tables.extend(t)
 
-                # VALIDATION: Check if this is a standard SAT factura
-                has_dte = bool(re.search(r'N[úu]mero\s*de\s*DTE', text, re.IGNORECASE))
-                has_autorizacion = bool(re.search(r'N[úu]mero\s*de\s*Autorizaci[óo]n', text, re.IGNORECASE))
-                has_nit_emisor = bool(re.search(r'Nit\s*Emisor', text, re.IGNORECASE))
-                marker_count = sum([has_dte, has_autorizacion, has_nit_emisor])
-                is_standard_factura = marker_count >= 2
+                    # VALIDATION: Check if this is a standard SAT factura
+                    has_dte = bool(re.search(r'N[úu]mero\s*de\s*DTE', text, re.IGNORECASE))
+                    has_autorizacion = bool(re.search(r'N[úu]mero\s*de\s*Autorizaci[óo]n', text, re.IGNORECASE))
+                    has_nit_emisor = bool(re.search(r'Nit\s*Emisor', text, re.IGNORECASE))
+                    marker_count = sum([has_dte, has_autorizacion, has_nit_emisor])
+                    is_standard_factura = marker_count >= 2
 
-                if not is_standard_factura:
-                    skipped_non_standard.append(pdf_file.name)
-                    progress_bar.progress((i + 1) / len(uploaded_pdfs))
-                    continue
+                    if not is_standard_factura:
+                        skipped_non_standard.append(pdf_file.name)
+                        continue
 
-                dte_m = re.search(r'N[úu]mero\s*de\s*DTE:\s*(\d+)', text, re.IGNORECASE)
-                dte_val = dte_m.group(1) if dte_m else pdf_file.name
+                    dte_m = re.search(r'N[úu]mero\s*de\s*DTE:\s*(\d+)', text, re.IGNORECASE)
+                    dte_val = dte_m.group(1) if dte_m else pdf_file.name
 
-                # Duplicate-DTE guard
-                if str(dte_val).strip() in existing_dtes:
-                    st.warning(f"Esta factura (Num. DTE: {dte_val}) no ha sido agregado al archivo de Excel: ya ha sido procesado")
-                    progress_bar.progress((i + 1) / len(uploaded_pdfs))
-                    continue
+                    # Duplicate-DTE guard
+                    if str(dte_val).strip() in existing_dtes:
+                        skipped_duplicate.append((pdf_file.name, dte_val))
+                        st.warning(f"Esta factura (Num. DTE: {dte_val}) no ha sido agregado al archivo de Excel: ya ha sido procesado")
+                        continue
 
-                # Grab the single grand total — no line-item parsing, no product matching.
-                grand_total = extract_grand_total(tables, text)
-                if grand_total <= 0:
-                    st.warning(f"No se pudo determinar el total de la factura: {pdf_file.name}")
-                    progress_bar.progress((i + 1) / len(uploaded_pdfs))
-                    continue
+                    # Grab the single grand total — no line-item parsing, no product matching.
+                    grand_total = extract_grand_total(tables, text)
+                    if grand_total <= 0:
+                        skipped_no_total.append(pdf_file.name)
+                        st.warning(f"No se pudo determinar el total de la factura: {pdf_file.name}")
+                        continue
 
-                # Emisor / receptor metadata for "Extra Detalles"
-                nit_e_match = re.search(r'Emisor:\s*([0-9Kk\-]+)', text, re.I)
-                nit_r_match = re.search(r'Receptor:\s*([0-9Kk\-]+)', text, re.I)
-                name_e_match = re.search(r'(?:Factura(?:\s*Pequeño\s*Contribuyente)?)\s*\n+(.*?)\n+Nit\s*Emisor', text, re.IGNORECASE | re.DOTALL)
+                    # Emisor / receptor metadata for "Extra Detalles"
+                    nit_e_match = re.search(r'Emisor:\s*([0-9Kk\-]+)', text, re.I)
+                    nit_r_match = re.search(r'Receptor:\s*([0-9Kk\-]+)', text, re.I)
+                    name_e_match = re.search(r'(?:Factura(?:\s*Pequeño\s*Contribuyente)?)\s*\n+(.*?)\n+Nit\s*Emisor', text, re.IGNORECASE | re.DOTALL)
 
-                nit_e = nit_e_match.group(1).strip() if nit_e_match else "N/A"
-                nit_r = nit_r_match.group(1).strip() if nit_r_match else "N/A"
-                raw_name = re.sub(r'\s+', ' ', name_e_match.group(1).strip() if name_e_match else "N/A")
-                name_e = re.split(r'(?i)n[úu]mero\s*de\s*autorizaci[óo]n', raw_name)[0]
-                name_e = re.split(r'(?i)\bserie\b', name_e)[0].strip()
+                    nit_e = nit_e_match.group(1).strip() if nit_e_match else "N/A"
+                    nit_r = nit_r_match.group(1).strip() if nit_r_match else "N/A"
+                    raw_name = re.sub(r'\s+', ' ', name_e_match.group(1).strip() if name_e_match else "N/A")
+                    name_e = re.split(r'(?i)n[úu]mero\s*de\s*autorizaci[óo]n', raw_name)[0]
+                    name_e = re.split(r'(?i)\bserie\b', name_e)[0].strip()
 
-                m_id = user_m_id
-                m_name = user_m_name
+                    m_id = user_m_id
+                    m_name = user_m_name
 
-                batch_totals[m_id]['total'] += grand_total
-                if nit_e != "N/A": batch_totals[m_id]['emisores'].add(nit_e)
-                if nit_r != "N/A": batch_totals[m_id]['receptores'].add(nit_r)
+                    batch_totals[m_id]['total'] += grand_total
+                    if nit_e != "N/A": batch_totals[m_id]['emisores'].add(nit_e)
+                    if nit_r != "N/A": batch_totals[m_id]['receptores'].add(nit_r)
 
-                ws_det.append([pdf_file.name, name_e, nit_e, nit_r, dte_val, m_name])
-                existing_dtes.add(str(dte_val).strip())
-                new_count += 1
+                    ws_det.append([pdf_file.name, name_e, nit_e, nit_r, dte_val, m_name])
+                    existing_dtes.add(str(dte_val).strip())
+                    new_count += 1
+            except Exception as e:
+                # One PDF blew up — record it and keep going. Do NOT abort the batch.
+                failed_pdfs.append((pdf_file.name, f"{type(e).__name__}: {e}"))
 
             progress_bar.progress((i + 1) / len(uploaded_pdfs))
 
@@ -295,13 +304,45 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx and municipi
         output = io.BytesIO()
         wb.save(output)
 
-        st.success(f"¡Proceso completado! {new_count} facturas procesadas y agregadas al Excel con éxito.")
+        # Full accounting so every uploaded PDF is accounted for somewhere
+        total_uploaded = len(uploaded_pdfs)
+        accounted = new_count + len(skipped_non_standard) + len(skipped_duplicate) + len(skipped_no_total) + len(failed_pdfs)
+
+        st.success(
+            f"¡Proceso completado! {new_count} de {total_uploaded} facturas agregadas al Excel.\n\n"
+            f"Resumen: {new_count} agregadas · "
+            f"{len(skipped_duplicate)} duplicadas · "
+            f"{len(skipped_non_standard)} no estándar · "
+            f"{len(skipped_no_total)} sin total detectable · "
+            f"{len(failed_pdfs)} con error"
+        )
+
+        if accounted != total_uploaded:
+            st.error(f"⚠️ Discrepancia: {total_uploaded} facturas subidas pero solo {accounted} contabilizadas. Por favor reporte este caso.")
 
         if skipped_non_standard:
             warning_msg = f"⚠️ **{len(skipped_non_standard)} factura(s) no estándar fueron ignoradas** (proformas, cotizaciones, u otros formatos no oficiales). Estas deben procesarse manualmente:\n\n"
             for pdf_name in skipped_non_standard:
                 warning_msg += f"- {pdf_name}\n"
             st.warning(warning_msg)
+
+        if skipped_duplicate:
+            dup_msg = f"ℹ️ **{len(skipped_duplicate)} factura(s) duplicada(s) ignoradas** (su Num. DTE ya existía en 'Extra Detalles'):\n\n"
+            for pdf_name, dte in skipped_duplicate:
+                dup_msg += f"- {pdf_name} (DTE: {dte})\n"
+            st.info(dup_msg)
+
+        if skipped_no_total:
+            nt_msg = f"⚠️ **{len(skipped_no_total)} factura(s) sin total detectable** — no se encontró fila 'TOTALES'. Procesar manualmente:\n\n"
+            for pdf_name in skipped_no_total:
+                nt_msg += f"- {pdf_name}\n"
+            st.warning(nt_msg)
+
+        if failed_pdfs:
+            err_msg = f"❌ **{len(failed_pdfs)} factura(s) fallaron con error inesperado** (revisar manualmente):\n\n"
+            for pdf_name, err in failed_pdfs:
+                err_msg += f"- {pdf_name} — {err}\n"
+            st.error(err_msg)
 
         output.seek(0)
         st.download_button("Descargar Reporte Final", data=output.getvalue(),
