@@ -62,36 +62,42 @@ def extract_grand_total(tables, text):
     """
     Return the invoice's grand total from the 'TOTALES' row.
 
-    Primary strategy: find the row whose cells contain 'TOTALES' and use the IVA
-    anchor — Total (Q) sits immediately to the left of the 'IVA' Impuestos label.
-    This is robust against pdfplumber's column-count drift across pages.
+    Strategy: find the row whose first cell starts with 'TOTAL' and take the
+    LARGEST positive number in that row. This handles both invoice formats:
+    - Standard IVA facturas: Total (Q) > Impuestos (Impuestos is ~10.7% of Total
+      under Guatemala's 12% IVA), so max() picks the grand total.
+    - Pequeño Contribuyente facturas: no Impuestos column (it's empty), so Total
+      is the only positive number in the row and max() returns it directly.
 
-    Fallback: regex against the raw extracted text for a "TOTALES … IVA" line and
-    take the last number before IVA.
+    Falls back to text-regex if no TOTAL row is found in the table.
     """
-    # Primary: table-based
+    # PRIMARY: scan tables for a TOTAL-starting row, return the max positive cell.
+    best = 0.0
     for row in tables:
         if not row:
             continue
-        row_text_upper = " ".join(str(c) for c in row if c).upper()
-        if 'TOTALES' not in row_text_upper:
+        first_cell = str(row[0] or '').strip().upper()
+        if not first_cell.startswith('TOTAL'):
             continue
-        for idx, cell in enumerate(row):
-            if cell is None:
-                continue
-            if str(cell).strip().upper() == 'IVA' and idx > 0:
-                val = clean_currency(row[idx - 1])
-                if val > 0:
-                    return val
+        positives = [clean_currency(c) for c in row if c is not None]
+        positives = [n for n in positives if n > 0]
+        if positives:
+            cand = max(positives)
+            if cand > best:
+                best = cand
+    if best > 0:
+        return best
 
-    # Fallback: parse the raw text
-    m = re.search(r'TOTALES:?\s*(.+?)\s+IVA\b', text, re.IGNORECASE)
-    if m:
+    # FALLBACK: regex on raw text. Any 'TOTALES …' line, take its largest number.
+    for m in re.finditer(r'(?im)^\s*TOTALES?:?\s*(.+)$', text):
         nums = re.findall(r'[\d.,]+', m.group(1))
-        if nums:
-            return clean_currency(nums[-1])
-
-    return 0.0
+        positives = [clean_currency(n) for n in nums]
+        positives = [n for n in positives if n > 0]
+        if positives:
+            cand = max(positives)
+            if cand > best:
+                best = cand
+    return best
 
 # --- TRUCO CSS PARA TRADUCIR LA INTERFAZ A ESPAÑOL ---
 st.markdown("""
