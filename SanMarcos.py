@@ -109,18 +109,40 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- WEB UI ---
-st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: Totonicapán (Total)")
+st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: San Marcos")
 
 # Municipality selector - user must specify which municipality the receipts belong to
 MUNICIPIOS_OPCIONES = {
-    "Totonicapán": 1,
-    "San Cristóbal Totonicapán": 2,
-    "San Francisco El Alto": 3,
-    "San Andrés Xecul": 4,
-    "Momostenango": 5,
-    "Santa María Chiquimula": 6,
-    "Santa Lucía La Reforma": 7,
-    "San Bartolo Aguas Calientes": 8
+    "Ayutla": 1,
+    "Catarina": 2,
+    "Comitancillo": 3,
+    "Concepcion Tutuapa": 4,
+    "El Quetzal": 5,
+    "El Tumbador": 6,
+    "Esquipulas Palo Gordo": 7,
+    "Ixchiguan": 8,
+    "La Blanca": 9,
+    "La Reforma": 10,
+    "Malacatan": 11,
+    "Nuevo Progreso": 12,
+    "Ocos": 13,
+    "Pajapita": 14,
+    "Rio Blanco": 15,
+    "San Antonio Sacatepequez": 16,
+    "San Cristobal Cucho": 17,
+    "San Jose El Rodeo": 18,
+    "San Jose Ojetenam": 19,
+    "San Lorenzo": 20,
+    "San Marcos": 21,
+    "San Miguel Ixtahuacan": 22,
+    "San Pablo": 23,
+    "San Pedro Sacatepequez": 24,
+    "San Rafael Pie de la Cuesta": 25,
+    "Sibinal": 26,
+    "Sipacapa": 27,
+    "Tacana": 28,
+    "Tajumulco": 29,
+    "Tejutla": 30,
 }
 
 selected_municipio = st.selectbox(
@@ -188,8 +210,14 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx and municipi
             st.stop()
 
         EXCEL_MAPPINGS = {
-            1: "totonicapán", 2: "san cristobal", 3: "san francisco", 4: "san andres",
-            5: "momostenango", 6: "santa maria", 7: "santa lucia", 8: "san bartolo"
+    "ayutla": 1, "catarina": 2, "comitancillo": 3, "concepcion Tutuapa": 4,
+    "el quetzal": 5, "el tumbador": 6, "esquipulas palo gordo": 7, "ixchiguan": 8,
+    "la blanca": 9,"la reforma": 10, "malacatan": 11, "nuevo Progreso": 12,
+    "ocos": 13, "pajapita": 14, "rio rlanco": 15, "san antonio sacatepequez": 16,
+    "san cristobal cucho": 17, "san jose el rodeo": 18, "san jose ojetenam": 19, "san lorenzo": 20,
+    "san marcos": 21, "san miguel ixtahuacan": 22, "san pablo": 23,
+    "san pedro sacatepequez": 24, "san rafael pie de la cuesta": 25,
+    "sibinal": 26, "sipacapa": 27, "tacana": 28, "tajumulco": 29,  "tejutla": 30
         }
 
         # 2. Map Excel Rows to Municipalities
