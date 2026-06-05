@@ -210,14 +210,14 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx and municipi
             st.stop()
 
         EXCEL_MAPPINGS = {
-    "ayutla": 1, "catarina": 2, "comitancillo": 3, "concepcion Tutuapa": 4,
-    "el quetzal": 5, "el tumbador": 6, "esquipulas palo gordo": 7, "ixchiguan": 8,
-    "la blanca": 9,"la reforma": 10, "malacatan": 11, "nuevo Progreso": 12,
-    "ocos": 13, "pajapita": 14, "rio rlanco": 15, "san antonio sacatepequez": 16,
-    "san cristobal cucho": 17, "san jose el rodeo": 18, "san jose ojetenam": 19, "san lorenzo": 20,
-    "san marcos": 21, "san miguel ixtahuacan": 22, "san pablo": 23,
-    "san pedro sacatepequez": 24, "san rafael pie de la cuesta": 25,
-    "sibinal": 26, "sipacapa": 27, "tacana": 28, "tajumulco": 29,  "tejutla": 30
+    1: "ayutla", 2: "catarina", 3: "comitancillo", 4: "concepcion tutuapa",
+    5: "el quetzal", 6: "el tumbador", 7: "esquipulas palo gordo", 8: "ixchiguan",
+    9: "la blanca", 10: "la reforma", 11: "malacatan", 12: "nuevo progreso",
+    13: "ocos", 14: "pajapita", 15: "rio blanco", 16: "san antonio sacatepequez",
+    17: "san cristobal cucho", 18: "san jose el rodeo", 19: "san jose ojetenam", 20: "san lorenzo",
+    21: "san marcos", 22: "san miguel ixtahuacan", 23: "san pablo",
+    24: "san pedro sacatepequez", 25: "san rafael pie de la cuesta",
+    26: "sibinal", 27: "sipacapa", 28: "tacana", 29: "tajumulco",  30: "tejutla"
         }
 
         # 2. Map Excel Rows to Municipalities
