@@ -69,17 +69,41 @@ def extract_grand_total(tables, text):
     - Pequeño Contribuyente facturas: no Impuestos column (it's empty), so Total
       is the only positive number in the row and max() returns it directly.
 
+    Also handles PDFs where a thin white line inside the TOTALES row causes
+    pdfplumber to split it into two rows. When that happens the first fragment
+    starts with 'TOTAL' but may be missing the grand-total cell; subsequent
+    fragments have an empty first cell. We merge all consecutive continuation
+    rows (empty first cell) into the same candidate set before calling max().
+
     Falls back to text-regex if no TOTAL row is found in the table.
     """
     # PRIMARY: scan tables for a TOTAL-starting row, return the max positive cell.
+    # Use an index loop so we can look ahead at continuation rows.
     best = 0.0
-    for row in tables:
+    i = 0
+    while i < len(tables):
+        row = tables[i]
+        i += 1
         if not row:
             continue
         first_cell = str(row[0] or '').strip().upper()
         if not first_cell.startswith('TOTAL'):
             continue
-        positives = [clean_currency(c) for c in row if c is not None]
+        # Collect cells from this row plus any immediately following rows whose
+        # first cell is empty/None (split continuation due to a white ruling line).
+        combined = list(row)
+        while i < len(tables):
+            next_row = tables[i]
+            if not next_row:
+                i += 1
+                continue
+            next_first = str(next_row[0] or '').strip()
+            if next_first == '':
+                combined.extend(next_row)
+                i += 1
+            else:
+                break
+        positives = [clean_currency(c) for c in combined if c is not None]
         positives = [n for n in positives if n > 0]
         if positives:
             cand = max(positives)
