@@ -6,7 +6,6 @@ import unicodedata
 import streamlit as st
 import re
 import io
-from rapidfuzz import fuzz, process
 
 # --- HELPER FUNCTIONS ---
 def normalize_text(text):
