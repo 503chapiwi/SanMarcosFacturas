@@ -180,7 +180,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- WEB UI ---
-st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: Totonicapán")
+st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: San Marcos")
 uploaded_pdfs = st.file_uploader(label='1. Seleccione sus Facturas (PDFs)', type='pdf', accept_multiple_files=True)
 uploaded_xlsx = st.file_uploader(label='2. Seleccione su Archivo de Excel', type='xlsx')
 
@@ -235,7 +235,7 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx:
             st.error(f"No encontré las columnas base en el Excel.")
             st.stop()
 
-        department_name = 'totonicapan'
+        department_name = 'san marcos'
         # 2. MASTER MUNICIPALITY DICTIONARY
         MUNICIPIOS = {
             1: {"nombre_oficial": "Ayutla"},
