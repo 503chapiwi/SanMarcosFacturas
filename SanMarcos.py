@@ -157,7 +157,7 @@ st.markdown("""
 st.title("🇬🇹 MAGA: Procesador de Facturas por la LAE: San Marcos")
 
 # Municipality selector - user must specify which municipality the receipts belong to
-MUNICIPIOS = {
+MUNICIPIOS_OPCIONES = {
     1: {"nombre_oficial": "Ayutla"},
     2: {"nombre_oficial": "Catarina"},
     3: {"nombre_oficial": "Comitancillo"},
