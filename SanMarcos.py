@@ -174,7 +174,7 @@ MUNICIPIOS_OPCIONES = {
     "Pajapita": 14,
     "Rio Blanco": 15,
     "San Antonio Sacatapequez": 16,
-    "San Cristobal Cuhco": 17,
+    "San Cristobal Cucho": 17,
     "San Jose El Rodeo": 18,
     "San Jose Ojetenam": 19,
     "San Lorenzo": 20,
@@ -260,7 +260,7 @@ if st.button("INICIAR PROCESO") and uploaded_pdfs and uploaded_xlsx and municipi
             st.stop()
 
         EXCEL_MAPPINGS = {
-            1: "ayutla", 2: "catarina", 3: "camitancillo", 4: "concepcion tutuapa",
+            1: "ayutla", 2: "catarina", 3: "comitancillo", 4: "concepcion tutuapa",
             5: "el quetzal", 6: "el tumbador", 7: "esquipulas palo gordo", 8: "ixchiguan", 
             9: "la blanca", 10: "la reforma", 11: "malacatan", 12: "nuevo progreso", 
             13: "ocos", 14: "pajapita", 15: "rio blanco", 16: "san antonio sacatepequez", 
